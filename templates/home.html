@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Books List</title>
+    <style></style>
+    <link rel="stylesheet" href="localhost:8000/static/css/styles.css">
+</head>
+<body>
+    <h1>Books List</h1>
+    <div class="book-list">
+        {% if books %}
+            {% for book in books %}
+                <div class="book">
+                    <h3>{{ book.bookTitle }}</h3>
+                    <p><strong>Author:</strong> {{ book.bookAuthor }}</p>
+                    <p><strong>Publisher</strong> {{ book.bookPublisher }}</p>
+                    <p><strong>Price</strong> {{ book.bookPrice }}</p>
+                    <p><strong>Publisher</strong> {{ book.bookCategory }}</p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No books available.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
