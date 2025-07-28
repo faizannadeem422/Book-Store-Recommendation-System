@@ -97,6 +97,10 @@ def home(request: Request, db:db_dependency):
         "books": booksData
     })
 
-@app.get("/file")
+
+@app.get("/version")
 def file():
-    return FileResponse("./static/imgs/me.jpg")
+    import sys
+    return {
+        "versionData": str(sys.version)
+    }
