@@ -40,7 +40,7 @@ class addBook(BaseModel):
     bookTitle: str
     bookAuthor: str
     bookPublisher: str
-    bookPrice: float = 200.0
+    bookPrice: int = 200
     category: str
 
 class updateBook(BaseModel):
@@ -48,5 +48,5 @@ class updateBook(BaseModel):
     bookTitle: str
     bookAuthor: str
     bookPublisher: str
-    bookPrice: float
+    bookPrice: int
 

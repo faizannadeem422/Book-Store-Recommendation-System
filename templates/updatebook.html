@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Update Book</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f7f7f7;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: #fff;
+            padding: 2em;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 1em;
+        }
+
+        form label {
+            display: block;
+            margin-top: 1em;
+        }
+
+        form input,
+        form select {
+            width: 100%;
+            padding: 0.5em;
+            margin-top: 0.3em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        form button {
+            margin-top: 1.5em;
+            width: 100%;
+            padding: 0.7em;
+            background: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 1em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>Update Book</h2>
+        <form id="updateBookForm">
+            <input type="hidden" id="bookID" name="bookID" value="{{ bookID if bookID else '' }}">
+
+            <label for="bookTitle">Title</label>
+            <input type="text" id="bookTitle" name="bookTitle" required>
+
+            <label for="bookAuthor">Author</label>
+            <input type="text" id="bookAuthor" name="bookAuthor" required>
+
+            <label for="bookPublisher">Publisher</label>
+            <input type="text" id="bookPublisher" name="bookPublisher" required>
+
+            <label for="bookPrice">Price</label>
+            <input type="number" id="bookPrice" name="bookPrice" step="1" min="0" required>
+
+            <button type="submit">Update Book</button>
+        </form>
+
+        <a class="back-link" href="/">← Back to Home</a>
+    </div>
+
+    <script>
+        function getAuthToken() {
+            let token = window.localStorage.getItem('authToken');
+            if (!token) {
+                token = window.prompt('Enter your Authorization token (will be saved locally):');
+                if (token && token.trim().length > 0) {
+                    window.localStorage.setItem('authToken', token.trim());
+                }
+            }
+            return token;
+        }
+
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        async function fetchBookAndFillForm(bookID) {
+            const token = getAuthToken();
+            if (!token) {
+                alert('Authorization token is required. Please login and provide the token.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/books/id?book_id=${encodeURIComponent(bookID)}`, {
+                    headers: {
+                        'Authorization': token
+                    }
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Failed to fetch book');
+                }
+                const data = await response.json();
+
+                document.getElementById('bookID').value = data.bookID;
+                document.getElementById('bookTitle').value = data.bookTitle;
+                document.getElementById('bookAuthor').value = data.bookAuthor;
+                document.getElementById('bookPublisher').value = data.bookPublisher;
+                document.getElementById('bookPrice').value = data.bookPrice;
+            } catch (error) {
+                alert('Error: ' + (error?.message || 'Unknown error'));
+            }
+        }
+
+        async function updateBookApiRequest(bookData) {
+            const token = getAuthToken();
+            if (!token) {
+                alert('Authorization token is required. Please login and provide the token.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/books/update', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token
+                    },
+                    body: JSON.stringify(bookData)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Failed to update book');
+                }
+
+                await response.json();
+                alert('Book updated successfully!');
+                window.location.href = '/';
+            } catch (error) {
+                alert('Error: ' + (error?.message || 'Unknown error'));
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const hiddenId = document.getElementById('bookID').value;
+            const idFromQuery = getQueryParam('bookID') || getQueryParam('book_id');
+            const bookID = hiddenId || idFromQuery;
+            if (bookID) {
+                fetchBookAndFillForm(bookID);
+            }
+
+            const form = document.getElementById('updateBookForm');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                const payload = {
+                    bookID: parseInt(document.getElementById('bookID').value, 10),
+                    bookTitle: document.getElementById('bookTitle').value.trim(),
+                    bookAuthor: document.getElementById('bookAuthor').value.trim(),
+                    bookPublisher: document.getElementById('bookPublisher').value.trim(),
+                    bookPrice: parseInt(document.getElementById('bookPrice').value, 10)
+                };
+
+                if (!payload.bookID || Number.isNaN(payload.bookID)) {
+                    alert('Invalid book ID.');
+                    return;
+                }
+
+                updateBookApiRequest(payload);
+            });
+        });
+    </script>
+</body>
+
+</html>
+
+

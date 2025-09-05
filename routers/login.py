@@ -1,16 +1,16 @@
-from datetime import datetime, timedelta
 import random
 import time
 from typing import Annotated
-import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+
 import auth
 from mailer import send_plain_email
 import models
 import schema
 from database import sessionLocal
+from services import users as UsersService
 
 router = APIRouter()
 
@@ -26,51 +26,48 @@ db_dependency = Annotated[Session, Depends(get_db)]
 # Create new user
 @router.post("/register")
 def register(register:schema.register, db:db_dependency, backgroundTasks:BackgroundTasks):
-    try:
-        otp = random.randint(100000, 999999)
-        future_time = datetime.now() + timedelta(minutes=10)
-
-        user = models.users(
-            user_name = register.userName,
-            user_email = register.userEmail,
-            user_password = auth.get_password_hash(register.userPassword),
-            created_at = datetime.now(),
-            isVerified = False,
-            OTP = otp,
-            otpExpiry = int(future_time.timestamp())
-        )
-
-
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        backgroundTasks.add_task(
-            send_plain_email,
-            receiver_email=user.user_email,
-            subject="OTP Verification",
-            body=f"OTP is {otp}"
-        )
-        
-
-        return {
-        "message": "User added successfully"
-        }
-
-    except Exception as e:
-        return {
-            "error": e
-        }
     
+    otp = random.randint(100000, 999999)
+
+    user_name = register.userName
+    user_email = register.userEmail
+    user_password = register.userPassword
+
+    if UsersService.isUserExist(user_email, db):
+        raise HTTPException(status_code=409, detail="User Already Exist!")
+
+    user = UsersService.RegisterUser(
+        username=user_name,
+        email=user_email,
+        plain_password=user_password,
+        otp=otp,
+        db=db
+    )
+
+    backgroundTasks.add_task(
+        send_plain_email,
+        receiver_email=user.user_email,
+        subject="OTP Verification",
+        body=f"OTP is {otp}"
+    )
+    
+    return {
+    "message": "User added successfully"
+    }
+ 
 # Verify OTP
 @router.post("/verify")
 def verifyOTP(verify:schema.verify, db:db_dependency):
+
+    otp = verify.OTP
+    email = verify.userEmail
+
     try:
-        user = db.query(models.users).filter(
-            (models.users.OTP == verify.OTP) & 
-            (models.users.user_email == verify.userEmail) &
-            (models.users.otpExpiry < int(time.time()))
-        ).first()   
+        user = UsersService.GetUser(
+            otp=otp,
+            email=email,
+            db=db
+        )
 
         if not user.isVerified:
             user.isVerified = True
@@ -87,14 +84,13 @@ def verifyOTP(verify:schema.verify, db:db_dependency):
     except Exception as e:
         return {"message": "Invalid OTP"}
 
-# Login a user - JSONResponse & Pydantic Output Validation
+# Login a user 
 @router.post("/login", response_model=schema.loginResponse)
 def login(login:schema.login, db:db_dependency, backgroundTask:BackgroundTasks):
-    user = db.query(models.users).filter(
-        login.userEmail == models.users.user_email
-    ).first()
-
+    email = login.userEmail
     userpassword = login.userPassword
+
+    user = UsersService.GetUserForLogin(email, db)
 
     hashedpassword = user.user_password
 
@@ -126,20 +122,16 @@ def login(login:schema.login, db:db_dependency, backgroundTask:BackgroundTasks):
         }
     )
 
-    db.commit()
-    db.refresh(user)
-
     # Adding email task
     backgroundTask.add_task(
         send_plain_email,
-        receiver_email="imfaizannadeem2@gmail.com",
+        receiver_email=user.user_email,
         subject="Login Alert",
         body=f"A new device has been logged in"
     )
 
     return JSONResponse(
         content={
-            "message": "Login successful",
             "data": {
                 "userID": user.user_id,
                 "userName": user.user_name,

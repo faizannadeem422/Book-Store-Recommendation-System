@@ -1,8 +1,5 @@
-import os
-import time
 from typing import Annotated
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,6 +10,7 @@ import routers.login
 from database import engine, sessionLocal
 import routers
 from middleware.logger import LoggingMiddleware
+from backgroundTasks import tasks
 
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -21,27 +19,8 @@ from sqlalchemy.orm import Session
 models.Base.metadata.create_all(bind=engine)
 scheduler = BackgroundScheduler()
 
-logCounter = 0
-def logCreator():
-    global logCounter
-    
-    with open(f"./logs/{str(int(time.time()))}.txt", "w") as file:
-        file.write(f"{time.time()}")
-        file.close()
-        logCounter += 1
-        print("log added")
-
-def logsDeleter():
-    try:
-        for fileName in os.listdir("./logs/"):
-            filePath = os.path.join("./logs",fileName)
-            os.remove(filePath)
-        print("Files deleted successfully")
-    except: 
-        print("There might be a problem while removing files")
-
-scheduler.add_job(logCreator, "interval", seconds=500)
-scheduler.add_job(logsDeleter, "interval", seconds=1000)
+scheduler.add_job(tasks.logCreator, "interval", seconds=5)
+scheduler.add_job(tasks.logsDeleter, "interval", seconds=60)
 
 scheduler.start()
 
@@ -97,6 +76,33 @@ def home(request: Request, db:db_dependency):
         "books": booksData
     })
 
+@app.get("/addbookpage")
+def home(request: Request, db:db_dependency):
+    booksData = []
+
+    for book in db.query(models.books).all():
+        booksData.append(
+            {
+                "bookID": book.book_id,
+                "bookTitle": book.book_title,
+                "bookAuthor": book.book_author,
+                "bookPublisher": book.book_publisher,
+                "bookPrice": book.book_price,
+                "bookCategory": book.category
+            }
+        )
+
+    return templates.TemplateResponse("addBook.html", {
+        "request": request,
+        "books": booksData
+    })
+
+@app.get("/updatebookpage")
+def home(request: Request, db:db_dependency, bookID:int | None = None):
+    return templates.TemplateResponse("updatebook.html", {
+        "request": request,
+        "bookID": bookID
+    })
 
 @app.get("/version")
 def file():

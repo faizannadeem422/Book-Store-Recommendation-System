@@ -1,15 +1,13 @@
-from datetime import datetime
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 import jwt
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 import auth
-import models
 import schema
 from database import sessionLocal
-import utils
+from services.books import AddBook, AddNewBookOpenFrequency, DeleteBook, FetchAllBooks, FetchAllBooksByUser, FetchBookOpenFrequency, FetchOneBook, UpdateBook, UpdateBookOpenFrequency
+from services.recommendation import FetchBooks, GetTopCategories
 
 router = APIRouter()
 
@@ -26,10 +24,6 @@ db_dependency = Annotated[Session, Depends(get_db)]
 @router.post("/add")
 def addNewBook(request:Request, book:schema.addBook, db:db_dependency):
     authToken = request.headers.get("Authorization")
-
-    # current_user: schema.user = Depends(utils.get_current_user)
-    # print(current_user.userId)
-
 
     decodedToken = auth.decode_access_token(authToken)
 
@@ -53,37 +47,23 @@ def addNewBook(request:Request, book:schema.addBook, db:db_dependency):
             detail="Invalid token"
         )
 
-    newBook = models.books(
-        user_id = decodedToken["userId"],
-        book_title = book.bookTitle,
-        book_author = book.bookAuthor,
-        book_publisher = book.bookPublisher,
-        book_price = book.bookPrice,
-        category = book.category
+    # Adding new book using service function
+    newBook = AddBook(
+        userId = decodedToken["userId"],
+        title = book.bookTitle,
+        bookAuthor = book.bookAuthor,
+        bookPublisher = book.bookPublisher,
+        bookPrice = book.bookPrice,
+        category = book.category,
+        db=db
     )
 
-    db.add(newBook)
-    db.commit()
-    db.refresh(newBook)
+    allBooks = FetchAllBooksByUser(userId=decodedToken["userId"], db=db)
 
-    allBooks = db.query(models.books).filter(
-        models.users.user_id == decodedToken["userId"]
-    ).all()
+    booksOpenFrequency = FetchBookOpenFrequency(category=book.category, db=db)
 
-    booksOpenFrequency = db.query(models.booksOpenFrequency).filter(
-        models.booksOpenFrequency.category == newBook.category
-    ).first()
-
-    if not booksOpenFrequency or booksOpenFrequency.category != newBook.category:
-        newBooksOpenFrequency = models.booksOpenFrequency(
-            book_id = newBook.book_id,
-            frequency = 0,
-            category = newBook.category
-        )
-
-        db.add(newBooksOpenFrequency)
-        db.commit()
-        db.refresh(newBooksOpenFrequency)
+    if not booksOpenFrequency:
+        AddNewBookOpenFrequency(book_id=newBook.book_id, category=book.category, db=db)
 
     data = []
     for book in allBooks:
@@ -109,6 +89,7 @@ def getBook(request:Request, book_id:int, db:db_dependency):
     try:
         authToken = request.headers.get("Authorization")
 
+        # Decoding authorization token 
         decodedToken = auth.decode_access_token(authToken)
         if decodedToken == None:
             return JSONResponse(
@@ -118,42 +99,26 @@ def getBook(request:Request, book_id:int, db:db_dependency):
                 }
             )
 
+        # Authorization Check
         if decodedToken == jwt.ExpiredSignatureError:
             raise HTTPException(
                 status_code= 401,
                 detail="Unauthorized user"
             )
         
+        # Token validation check
         if decodedToken == jwt.InvalidTokenError:
             raise HTTPException(
                 status_code= 400,
                 detail="Invalid token"
             )
-        print(decodedToken)
         
-        book = db.query(models.books).filter(
-            (models.books.book_id == book_id) &
-            (models.books.user_id == decodedToken["userId"])
-        ).first()
-        
-        if book == None:
-            
-            raise HTTPException(
-                status_code=404,
-                detail="Book not found"
-            )
-        
-        openFrequency = db.query(models.booksOpenFrequency).filter(
-            models.booksOpenFrequency.category == book.category
-        ).first()
+        book = FetchOneBook(bookId=book_id, userId=decodedToken["userId"], db=db)
 
-        if openFrequency:
-            openFrequency.frequency += 1
-            openFrequency.open_timestamp = datetime.now()
+        isOpenFrequencyExists, OpenFrequency = FetchBookOpenFrequency(book.category, db)
 
-            db.add(openFrequency)
-            db.commit()
-            db.refresh(openFrequency)
+        if isOpenFrequencyExists:
+            UpdateBookOpenFrequency(category=book.category, db=db)
 
         return {
             "bookID": book.book_id,
@@ -193,10 +158,7 @@ def getAllBooks(request:Request, db:db_dependency):
             detail="Invalid token"
         )
 
-    books = db.query(models.books).filter(
-        models.books.user_id == decodedToken["userId"]
-    ).all()
-
+    books = FetchAllBooks(userId=decodedToken["userId"], db=db)
     return books
 
 # Update a book
@@ -214,8 +176,6 @@ def updateBook(request:Request, updateBook:schema.updateBook, db:db_dependency):
             }
         )
 
-    print("debug")
-
     if decodedToken == jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code= 401,
@@ -228,21 +188,12 @@ def updateBook(request:Request, updateBook:schema.updateBook, db:db_dependency):
             detail="Invalid token"
         )
     
-    book = db.query(models.books).filter(
-        (models.books.user_id == decodedToken["userId"]) &
-        (models.books.book_id == updateBook.bookID)
-    ).first()
-
-    print(book)
-
-    book.book_title = updateBook.bookTitle
-    book.book_author = updateBook.bookAuthor
-    book.book_publisher = updateBook.bookPublisher
-    book.book_price = updateBook.bookPrice
-
-    db.add(book)
-    db.commit()
-    # db.refresh(book)
+    book = UpdateBook(
+        userId=decodedToken["userId"],
+        bookId=updateBook.bookID,
+        updateBook=updateBook,
+        db=db
+    )
 
     return JSONResponse(
         content={  
@@ -294,23 +245,20 @@ def delete(bookID:int, request:Request, db:db_dependency, limit:int = 10):
             detail="Invalid token"
         )
 
-    book = db.query(models.books).filter(
-        (models.books.book_id == bookID) &
-        (models.users.user_id == decodedToken["userId"])
-    ).first()
-
-    if not book:
-        raise HTTPException(
-            status_code=404,
-            detail="Book not found"
+    if DeleteBook(userId=decodedToken["userId"], bookId=bookID, db=db):
+        return JSONResponse(
+            content={
+                "message": "Book successfully deleted"
+            },
+            status_code=204
         )
-
-    db.delete(book)
-    db.commit()
-
-    return {
-        "message": "Book successfully deleted"
-    }
+    else:
+        return JSONResponse(
+            content={
+                "message": "An error occured while deleting book"
+            },
+            status_code=400
+        )
 
 # Recommended Books
 @router.get("/recommendations")
@@ -340,14 +288,12 @@ def recommendations(request:Request, db:db_dependency):
         )
 
     try:
-        frequencies = db.query(models.booksOpenFrequency).order_by(
-            desc(models.booksOpenFrequency.frequency)
-        ).limit(3).all()
+        frequencies = GetTopCategories(db)
 
         # topBooks = []
 
         for frequency in frequencies:
-            topBooks = db.query(models.books).filter(frequency.category == models.books.category).all()
+            topBooks = FetchBooks(category=frequency.category, db=db)
         
         data = []
 

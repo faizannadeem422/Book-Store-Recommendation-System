@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Add New Book</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f7f7f7;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: #fff;
+            padding: 2em;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 1em;
+        }
+
+        form label {
+            display: block;
+            margin-top: 1em;
+        }
+
+        form input,
+        form select {
+            width: 100%;
+            padding: 0.5em;
+            margin-top: 0.3em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        form button {
+            margin-top: 1.5em;
+            width: 100%;
+            padding: 0.7em;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .books-list {
+            margin-top: 2em;
+        }
+
+        .books-list h3 {
+            margin-bottom: 0.5em;
+        }
+
+        .book-item {
+            background: #f1f1f1;
+            padding: 0.7em;
+            border-radius: 4px;
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>Add a New Book</h2>
+        <form id="addBookForm" action="/books/add" method="post">
+            <label for="bookTitle">Title</label>
+            <input type="text" id="bookTitle" name="bookTitle" required>
+
+            <label for="bookAuthor">Author</label>
+            <input type="text" id="bookAuthor" name="bookAuthor" required>
+
+            <label for="bookPublisher">Publisher</label>
+            <input type="text" id="bookPublisher" name="bookPublisher" required>
+
+            <label for="bookPrice">Price</label>
+            <input type="number" id="bookPrice" name="bookPrice" step="0.01" min="0" required>
+
+            <label for="bookCategory">Category</label>
+            <input type="text" id="bookCategory" name="bookCategory" required>
+
+            <button type="submit">Add Book</button>
+        </form>
+
+        <script>
+            function getAuthToken() {
+                let token = window.localStorage.getItem('authToken');
+                if (!token) {
+                    token = window.prompt('Enter your Authorization token (will be saved locally):');
+                    if (token && token.trim().length > 0) {
+                        window.localStorage.setItem('authToken', token.trim());
+                    }
+                }
+                return token;
+            }
+
+            async function addBookApiRequest(bookData) {
+                const token = getAuthToken();
+                if (!token) {
+                    alert('Authorization token is required. Please login and provide the token.');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/books/add', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': token
+                        },
+                        body: JSON.stringify(bookData)
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(errorText || 'Failed to add book');
+                    }
+
+                    await response.json();
+                    alert('Book added successfully!');
+                    window.location.reload();
+                } catch (error) {
+                    alert('Error: ' + (error?.message || 'Unknown error'));
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const form = document.getElementById('addBookForm');
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+
+                    const bookTitle = document.getElementById('bookTitle').value.trim();
+                    const bookAuthor = document.getElementById('bookAuthor').value.trim();
+                    const bookPublisher = document.getElementById('bookPublisher').value.trim();
+                    const bookPriceRaw = document.getElementById('bookPrice').value;
+                    const bookCategory = document.getElementById('bookCategory').value.trim();
+
+                    const bookPrice = parseInt(bookPriceRaw, 10);
+                    if (Number.isNaN(bookPrice)) {
+                        alert('Price must be a number');
+                        return;
+                    }
+
+                    const payload = {
+                        bookTitle,
+                        bookAuthor,
+                        bookPublisher,
+                        bookPrice,
+                        category: bookCategory
+                    };
+
+                    addBookApiRequest(payload);
+                });
+            });
+        </script>
+
+        <div class="books-list">
+            <h3>Existing Books</h3>
+            {% if books and books|length > 0 %}
+            {% for book in books %}
+            <div class="book-item">
+                <strong>{{ book.bookTitle }}</strong> by {{ book.bookAuthor }}<br>
+                <em>Publisher:</em> {{ book.bookPublisher }}<br>
+                <em>Price:</em> ${{ "%.2f"|format(book.bookPrice) }}<br>
+                <em>Category:</em> {{ book.bookCategory }}
+            </div>
+            {% endfor %}
+            {% else %}
+            <p>No books available.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+
+</html>
