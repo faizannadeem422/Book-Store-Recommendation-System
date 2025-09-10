@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import auth
 from mailer import send_plain_email
 import models
-import schema
+from schemas import users as UserSchema
 from database import sessionLocal
 from services import users as UsersService
 
@@ -25,7 +25,7 @@ db_dependency = Annotated[Session, Depends(get_db)]
     
 # Create new user
 @router.post("/register")
-def register(register:schema.register, db:db_dependency, backgroundTasks:BackgroundTasks):
+def register(register:UserSchema.register, db:db_dependency, backgroundTasks:BackgroundTasks):
     
     otp = random.randint(100000, 999999)
 
@@ -57,7 +57,7 @@ def register(register:schema.register, db:db_dependency, backgroundTasks:Backgro
  
 # Verify OTP
 @router.post("/verify")
-def verifyOTP(verify:schema.verify, db:db_dependency):
+def verifyOTP(verify:UserSchema.verify, db:db_dependency):
 
     otp = verify.OTP
     email = verify.userEmail
@@ -85,8 +85,8 @@ def verifyOTP(verify:schema.verify, db:db_dependency):
         return {"message": "Invalid OTP"}
 
 # Login a user 
-@router.post("/login", response_model=schema.loginResponse)
-def login(login:schema.login, db:db_dependency, backgroundTask:BackgroundTasks):
+@router.post("/login", response_model=UserSchema.loginResponse)
+def login(login:UserSchema.login, db:db_dependency, backgroundTask:BackgroundTasks):
     email = login.userEmail
     userpassword = login.userPassword
 

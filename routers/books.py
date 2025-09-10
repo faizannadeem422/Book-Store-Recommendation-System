@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 import jwt
 from sqlalchemy.orm import Session
+
 import auth
-import schema
+from schemas import books as BookSchema
 from database import sessionLocal
 from services.books import AddBook, AddNewBookOpenFrequency, DeleteBook, FetchAllBooks, FetchAllBooksByUser, FetchBookOpenFrequency, FetchOneBook, UpdateBook, UpdateBookOpenFrequency
 from services.recommendation import FetchBooks, GetTopCategories
@@ -22,7 +23,7 @@ db_dependency = Annotated[Session, Depends(get_db)]
 
 # Add a book
 @router.post("/add")
-def addNewBook(request:Request, book:schema.addBook, db:db_dependency):
+def addNewBook(request:Request, book:BookSchema.addBook, db:db_dependency):
     authToken = request.headers.get("Authorization")
 
     decodedToken = auth.decode_access_token(authToken)
@@ -163,7 +164,7 @@ def getAllBooks(request:Request, db:db_dependency):
 
 # Update a book
 @router.put("/update")
-def updateBook(request:Request, updateBook:schema.updateBook, db:db_dependency):
+def updateBook(request:Request, updateBook:BookSchema.updateBook, db:db_dependency):
     authToken = request.headers.get("Authorization")
 
     decodedToken = auth.decode_access_token(token=authToken)
